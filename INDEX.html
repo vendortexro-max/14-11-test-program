@@ -1353,8 +1353,102 @@ etrade: [],
 retailez: [],
 clicktech: []
 },
-deleteConfirm: null
+deleteConfirm: null,
+isLoading: false,
+hasUnsavedChanges: false
 };
+
+// LocalStorage keys for temporary data persistence
+const STORAGE_KEYS = {
+INVOICE_DATA: 'temp_invoiceData',
+FC_INVOICE_DATA: 'temp_fcInvoiceData',
+FC_INVOICE_ID: 'temp_fcInvoiceId',
+FC_INVOICE_DATE: 'temp_fcInvoiceDate',
+VRET_COGS_DATA: 'temp_vretCogsData'
+};
+
+// Save temporary data to localStorage to prevent loss on tab switch
+function saveTempDataToLocalStorage() {
+try {
+// Only save if data has changed from defaults
+if (JSON.stringify(state.invoiceData) !== JSON.stringify([{ id: 1, invoiceId: '', asin: '', quantity: '', itemPrice: '', date: '' }])) {
+localStorage.setItem(STORAGE_KEYS.INVOICE_DATA, JSON.stringify(state.invoiceData));
+}
+if (JSON.stringify(state.fcInvoiceData) !== JSON.stringify([{ id: 1, asin: '', quantity: '', itemPrice: '' }])) {
+localStorage.setItem(STORAGE_KEYS.FC_INVOICE_DATA, JSON.stringify(state.fcInvoiceData));
+localStorage.setItem(STORAGE_KEYS.FC_INVOICE_ID, state.fcInvoiceId);
+localStorage.setItem(STORAGE_KEYS.FC_INVOICE_DATE, state.fcInvoiceDate);
+}
+if (JSON.stringify(state.vretCogsData) !== JSON.stringify([{ id: 1, month: '', year: '', vret: '', cogs: '' }])) {
+localStorage.setItem(STORAGE_KEYS.VRET_COGS_DATA, JSON.stringify(state.vretCogsData));
+}
+} catch (error) {
+console.warn('Failed to save temp data to localStorage:', error);
+}
+}
+
+// Restore temporary data from localStorage
+function restoreTempDataFromLocalStorage() {
+try {
+const invoiceData = localStorage.getItem(STORAGE_KEYS.INVOICE_DATA);
+if (invoiceData) {
+state.invoiceData = JSON.parse(invoiceData);
+}
+
+const fcInvoiceData = localStorage.getItem(STORAGE_KEYS.FC_INVOICE_DATA);
+if (fcInvoiceData) {
+state.fcInvoiceData = JSON.parse(fcInvoiceData);
+state.fcInvoiceId = localStorage.getItem(STORAGE_KEYS.FC_INVOICE_ID) || '';
+state.fcInvoiceDate = localStorage.getItem(STORAGE_KEYS.FC_INVOICE_DATE) || '';
+}
+
+const vretCogsData = localStorage.getItem(STORAGE_KEYS.VRET_COGS_DATA);
+if (vretCogsData) {
+state.vretCogsData = JSON.parse(vretCogsData);
+}
+} catch (error) {
+console.warn('Failed to restore temp data from localStorage:', error);
+}
+}
+
+// Clear temporary data from localStorage after successful save
+function clearTempDataFromLocalStorage() {
+try {
+localStorage.removeItem(STORAGE_KEYS.INVOICE_DATA);
+localStorage.removeItem(STORAGE_KEYS.FC_INVOICE_DATA);
+localStorage.removeItem(STORAGE_KEYS.FC_INVOICE_ID);
+localStorage.removeItem(STORAGE_KEYS.FC_INVOICE_DATE);
+localStorage.removeItem(STORAGE_KEYS.VRET_COGS_DATA);
+} catch (error) {
+console.warn('Failed to clear temp data from localStorage:', error);
+}
+}
+
+// Check if there's unsaved data in temporary buffers
+function hasUnsavedTempData() {
+const hasInvoiceData = state.invoiceData.some(item =>
+item.asin?.trim() || item.invoiceId?.trim() || item.quantity?.trim() || item.itemPrice?.trim()
+);
+const hasFcInvoiceData = state.fcInvoiceData.some(item =>
+item.asin?.trim() || item.quantity?.trim() || item.itemPrice?.trim()
+) || state.fcInvoiceId.trim() || state.fcInvoiceDate.trim();
+const hasVretCogsData = state.vretCogsData.some(item =>
+item.month?.trim() || item.year?.trim() || item.vret?.trim() || item.cogs?.trim()
+);
+return hasInvoiceData || hasFcInvoiceData || hasVretCogsData;
+}
+
+// Debounce function to limit how often a function can run
+function debounce(func, delay) {
+let timeoutId;
+return function (...args) {
+clearTimeout(timeoutId);
+timeoutId = setTimeout(() => func.apply(this, args), delay);
+};
+}
+
+// Restore temp data on page load
+restoreTempDataFromLocalStorage();
 
 // Load data from Firebase
 async function loadData() {
@@ -1362,6 +1456,10 @@ if (!window.currentUser) {
 console.log('No user logged in, skipping load');
 return;
 }
+
+// Set loading state
+state.isLoading = true;
+showNotification('⏳ Loading data from Firebase...', 'info');
 
 try {
 console.log('📥 Loading data from Firebase Realtime Database...');
@@ -1481,6 +1579,9 @@ render();
 } catch (error) {
 console.error('Error loading data from Firebase:', error);
 showNotification('❌ Error loading data: ' + error.message, 'error');
+} finally {
+// Clear loading state
+state.isLoading = false;
 }
 }
 
@@ -1506,6 +1607,17 @@ console.log('⏸️ Skipping auto-save after logout');
 return;
 }
 
+// Prevent concurrent saves
+if (state.isLoading) {
+console.log('⏸️ Already saving/loading, skipping concurrent save');
+return;
+}
+
+state.isLoading = true;
+if (forceSave) {
+showNotification('⏳ Saving data to Firebase...', 'info');
+}
+
 try {
 console.log('💾 Saving all data to Firebase Realtime Database...');
 const userId = window.currentUser.uid;
@@ -1523,6 +1635,7 @@ const hasData = vendors.some(vendor =>
 
 if (!hasData) {
 console.log('⚠️ No data to save - skipping to prevent overwriting existing data');
+state.isLoading = false;
 return;
 }
 
@@ -1611,12 +1724,22 @@ await window.RealtimeDB.setData(
 );
 
 console.log('✅ All data saved to Firebase Realtime Database');
-showNotification('✅ Data saved and syncing in real-time!', 'success');
+if (forceSave) {
+showNotification('✅ Data saved successfully!', 'success');
+}
 } catch (error) {
 console.error('Error saving data to Firebase:', error);
 showNotification('❌ Error saving data: ' + error.message, 'error');
+} finally {
+state.isLoading = false;
 }
 }
+
+// Create debounced version of saveData for auto-save (reduces Firebase calls)
+const debouncedSaveData = debounce(() => {
+console.log('🔄 Auto-saving data (debounced)...');
+saveData(false);
+}, 5000); // Wait 5 seconds after last change before auto-saving
 
 // Real-time sync is disabled due to batching complexity
 // Data auto-saves every 30 seconds instead
@@ -1703,9 +1826,29 @@ render();
 // Tab Navigation
 document.querySelectorAll('.tab-btn').forEach(btn => {
 btn.addEventListener('click', () => {
+const newTab = btn.dataset.tab;
+const currentTab = state.activeTab;
+
+// Save temporary data before switching tabs
+saveTempDataToLocalStorage();
+
+// Check if leaving a tab with unsaved data
+if (hasUnsavedTempData() &&
+(currentTab === 'df-invoice' || currentTab === 'fc-invoice' || currentTab === 'vret-cogs')) {
+const confirmed = confirm(
+'⚠️ You have unsaved changes in the current tab.\n\n' +
+'Your data has been temporarily saved and will be available when you return to this tab.\n\n' +
+'Click "Save" button to permanently save before switching tabs.\n\n' +
+'Do you want to switch tabs anyway?'
+);
+if (!confirmed) {
+return; // Don't switch tabs
+}
+}
+
 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
 btn.classList.add('active');
-state.activeTab = btn.dataset.tab;
+state.activeTab = newTab;
 
 document.querySelectorAll('.tab-content').forEach(content => {
 content.classList.add('hidden');
@@ -2125,10 +2268,24 @@ return;
 }
 
 state.savedInvoices[state.selectedVendor].push(...validData);
+
+// Clear localStorage since data is now saved
+localStorage.removeItem(STORAGE_KEYS.INVOICE_DATA);
+
+// Ask user if they want to continue adding more data or clear the form
+const continueAdding = confirm(
+`✓ Saved ${validData.length} invoice items for ${state.selectedVendor}!\n\n` +
+'Do you want to add more invoice data?\n\n' +
+'Click "OK" to keep current data and add more.\n' +
+'Click "Cancel" to clear the form.'
+);
+
+if (!continueAdding) {
 state.invoiceData = [{ id: 1, invoiceId: '', asin: '', quantity: '', itemPrice: '', date: '' }];
-saveData();
+}
+
+saveData(true); // Force save to Firebase
 render();
-alert(`✓ Saved ${validData.length} invoice items for ${state.selectedVendor}!`);
 }
 
 document.getElementById('invoice-file-input').addEventListener('change', (e) => {
@@ -2355,12 +2512,28 @@ date: state.fcInvoiceDate
 }));
 
 state.savedInvoices[state.selectedVendor].push(...dataWithInvoiceInfo);
+
+// Clear localStorage since data is now saved
+localStorage.removeItem(STORAGE_KEYS.FC_INVOICE_DATA);
+localStorage.removeItem(STORAGE_KEYS.FC_INVOICE_ID);
+localStorage.removeItem(STORAGE_KEYS.FC_INVOICE_DATE);
+
+// Ask user if they want to continue adding more data or clear the form
+const continueAdding = confirm(
+`✓ Saved FC Invoice with ${validData.length} items for ${state.selectedVendor}!\n\n` +
+'Do you want to add more FC invoice data?\n\n' +
+'Click "OK" to keep current data and add more.\n' +
+'Click "Cancel" to clear the form.'
+);
+
+if (!continueAdding) {
 state.fcInvoiceData = [{ id: 1, asin: '', quantity: '', itemPrice: '' }];
 state.fcInvoiceId = '';
 state.fcInvoiceDate = '';
-saveData();
+}
+
+saveData(true); // Force save to Firebase
 render();
-alert(`✓ Saved FC Invoice with ${validData.length} items for ${state.selectedVendor}!`);
 }
 
 function exportFcInvoiceToExcel() {
@@ -2608,10 +2781,24 @@ return;
 }
 
 state.savedVretCogs[state.selectedVendor].push(...validData);
+
+// Clear localStorage since data is now saved
+localStorage.removeItem(STORAGE_KEYS.VRET_COGS_DATA);
+
+// Ask user if they want to continue adding more data or clear the form
+const continueAdding = confirm(
+`✓ Saved ${validData.length} VRET/COGS entries for ${state.selectedVendor}!\n\n` +
+'Do you want to add more VRET/COGS data?\n\n' +
+'Click "OK" to keep current data and add more.\n' +
+'Click "Cancel" to clear the form.'
+);
+
+if (!continueAdding) {
 state.vretCogsData = [{ id: 1, month: '', year: '', vret: '', cogs: '' }];
-saveData();
+}
+
+saveData(true); // Force save to Firebase
 render();
-alert(`✓ Saved ${validData.length} VRET/COGS entries for ${state.selectedVendor}!`);
 }
 
 function deleteVretCogsEntry(id) {
@@ -4231,8 +4418,27 @@ break;
 loadData();
 render();
 
-// Auto-save every 30 seconds
-setInterval(saveData, 30000);
+// Auto-save every 30 seconds (with debouncing)
+setInterval(() => {
+if (window.currentUser && !state.isLoading) {
+saveData(false); // Silent auto-save
+}
+}, 30000);
+
+// Save temporary data periodically to localStorage (every 5 seconds)
+setInterval(() => {
+saveTempDataToLocalStorage();
+}, 5000);
+
+// Warn user about unsaved changes before leaving the page
+window.addEventListener('beforeunload', (e) => {
+if (hasUnsavedTempData() && window.currentUser) {
+const message = 'You have unsaved changes. Are you sure you want to leave?';
+e.preventDefault();
+e.returnValue = message;
+return message;
+}
+});
 
 // ENHANCED FUNCTIONS FOR DAILY/WEEKLY/MONTHLY ANALYTICS WITH AD SPEND
 
