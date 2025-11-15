@@ -6183,6 +6183,66 @@ window.gapiLoaded = gapiLoaded;
 window.gisLoaded = gisLoaded;
 
 // Check if scripts are actually loading
+// Poll every 500ms to see if libraries are available
+let initCheckCount = 0;
+const maxInitChecks = 30; // 15 seconds max (30 * 500ms)
+
+const initChecker = setInterval(function() {
+  initCheckCount++;
+
+  // Check if libraries are available
+  const gapiAvailable = typeof gapi !== 'undefined';
+  const gisAvailable = typeof google !== 'undefined' && typeof google.accounts !== 'undefined';
+
+  console.log(`🔍 Check #${initCheckCount}: gapi=${gapiAvailable}, gis=${gisAvailable}, gapiInited=${gapiInited}, gisInited=${gisInited}`);
+
+  // Try to initialize if libraries are available but not initialized
+  if (gapiAvailable && !gapiInited) {
+    console.log('⚡ Manually initializing GAPI...');
+    try {
+      window.gapiLoaded();
+    } catch (err) {
+      console.error('Error calling gapiLoaded:', err);
+    }
+  }
+
+  if (gisAvailable && !gisInited) {
+    console.log('⚡ Manually initializing GIS...');
+    try {
+      window.gisLoaded();
+    } catch (err) {
+      console.error('Error calling gisLoaded:', err);
+    }
+  }
+
+  // If both are initialized, stop checking
+  if (gapiInited && gisInited) {
+    console.log('✅✅ Both APIs initialized successfully!');
+    clearInterval(initChecker);
+  }
+
+  // If we've checked too many times, give up
+  if (initCheckCount >= maxInitChecks) {
+    console.error('❌ Gave up after', maxInitChecks, 'checks (15 seconds)');
+    console.error('Final status: gapi loaded =', gapiAvailable, ', GIS loaded =', gisAvailable);
+    clearInterval(initChecker);
+
+    if (!gapiAvailable || !gisAvailable) {
+      console.error('');
+      console.error('Scripts did not load from Google CDN!');
+      console.error('Possible causes:');
+      console.error('  1. No internet connection');
+      console.error('  2. Firewall blocking googleapis.com');
+      console.error('  3. Ad blocker blocking scripts');
+      console.error('  4. Running from file:// protocol');
+      console.error('');
+
+      showAuthMessage('❌ Google API scripts failed to load.\n\nCheck:\n• Internet connection\n• Ad blocker disabled\n• Running from http://localhost:8000', 'error');
+    }
+  }
+}, 500);
+
+// Original timeout checker (now as backup)
 setTimeout(function() {
   console.log('🔍 Checking API loading status...');
   console.log('  - gapi loaded?', typeof gapi !== 'undefined');
