@@ -1191,12 +1191,11 @@ display: block;
 </head>
 <body>
 <!-- Authentication Container (shown when not logged in) -->
-<div id="authContainer" class="auth-container" style="display: none;">
-<!-- Authentication removed - using localStorage only for local data storage -->
+<div id="authContainer" class="auth-container" style="display: flex;">
 <div class="auth-box">
 <div class="auth-header">
 <h1>🔐 P&L Management</h1>
-<p>LOCAL VERSION - Data saved in browser only</p>
+<p>Sign in to access your data</p>
 </div>
 
 <!-- Google Sign-In Form -->
@@ -1229,13 +1228,16 @@ By signing in, you authorize this app to access your Google Sheets
 </div>
 </div>
 
-<!-- Main App Container (always shown - no login required) -->
-<div id="appContainer" style="display: block;">
+<!-- Main App Container (shown when logged in) -->
+<div id="appContainer" style="display: none;">
 <!-- Database Connection Status -->
 <div id="dbConnection" class="sheets-connection connected">
 <div class="status-dot connected"></div>
-<span id="connectionStatus">💾 Local Storage: Active ✓</span>
-<span id="userEmail" style="margin-left: 1rem; font-size: 0.875rem; color: #6b7280;">Data saved in browser</span>
+<span id="connectionStatus">Google Sheets: Connected ✓</span>
+<span id="userEmail" style="margin-left: 1rem; font-size: 0.875rem;"></span>
+<button onclick="handleLogout()" class="btn btn-secondary" style="margin-left: 1rem; padding: 0.5rem 0.875rem; font-size: 0.8125rem;">
+Logout
+</button>
 </div>
 
 <div class="header">
@@ -5662,64 +5664,656 @@ alert('Error logging out: ' + error.message);
 console.log('✓ Firebase authentication ready');
 </script>
 
-<!-- Local Storage Backend (No Authentication Required) -->
+<!-- Google Sheets API Configuration -->
 <script>
 // ================================================
-// LOCAL STORAGE BACKEND
-// No Google Sheets, No Firebase - Just browser localStorage
+// GOOGLE SHEETS API CONFIGURATION
 // ================================================
 
-console.log('💾 LOCAL STORAGE MODE');
-console.log('✅ No authentication required');  
-console.log('✅ Data saved in browser only');
-console.log('⚠️ Data will be lost if browser cache is cleared');
+// 🔧 CONFIGURATION - UPDATE THESE VALUES
+const GOOGLE_CLIENT_ID = '671694535012-c81khu9gfdj3h5upeui0elf2mt5dabbd.apps.googleusercontent.com'; // Your Google OAuth Client ID
+const SPREADSHEET_ID = '657B0sj44C3kwP8YhFaiUWA3wByUpKYP7dvEq5RV6w'; // Your Google Sheets ID
+const API_KEY = ''; // Optional: Add if you want to use API key for read-only operations
 
-// Set a dummy user so the app works
-window.currentUser = {
-  uid: 'local-user',
-  email: 'local@localhost',
-  displayName: 'Local User'
+// Google API configuration
+const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
+const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+
+// Global variables
+let tokenClient;
+let gapiInited = false;
+let gisInited = false;
+window.currentUser = null;
+
+// ================================================
+// GOOGLE SHEETS API BACKEND
+// Complete replacement for Firebase
+// ================================================
+
+// Define these functions BEFORE loading the scripts
+window.gapiLoaded = function() {
+  console.log('📦 GAPI script loaded, initializing client...');
+  gapi.load('client', window.initializeGapiClient);
 };
 
-// Mock RealtimeDB for compatibility (does nothing - localStorage is used instead)
-window.RealtimeDB = {
-  async setData(path, data) {
-    console.log('ℹ️ Using localStorage instead of RealtimeDB');
-    return { success: true };
-  },
-  async getData(path) {
-    return { success: true, data: null };
-  },
-  async deleteData(path) {
-    return { success: true };
-  },
-  listenToData() { return { success: true }; },
-  stopListening() { return { success: true }; }
-};
+window.gisLoaded = function() {
+  console.log('📦 GIS script loaded, initializing token client...');
+  try {
+    if (!window.google || !window.google.accounts) {
+      console.error('❌ Google Identity Services library not loaded');
+      setTimeout(window.gisLoaded, 500); // Retry after 500ms
+      return;
+    }
 
-// Mock FirebaseAuth for compatibility
-window.FirebaseAuth = {
-  async signIn() {
-    return { success: true, user: window.currentUser };
-  },
-  async signOut() {
-    return { success: true };
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: SCOPES,
+      callback: '', // defined later
+    });
+    gisInited = true;
+    window.maybeEnableButtons();
+    console.log('✅ Google Identity Services initialized');
+  } catch (err) {
+    console.error('❌ Error initializing Google Identity Services:', err);
+    if (typeof showAuthMessage === 'function') {
+      showAuthMessage('Failed to initialize Google Sign-In. Please refresh the page.', 'error');
+    }
   }
 };
 
-console.log('✅ Local storage backend initialized');
+// Helper function for initialization
+window.initializeGapiClient = async function() {
+  try {
+    await gapi.client.init({
+      apiKey: API_KEY,
+      discoveryDocs: [DISCOVERY_DOC],
+    });
+    gapiInited = true;
+    window.maybeEnableButtons();
+    console.log('✅ Google Sheets API initialized');
+  } catch (err) {
+    console.error('Error initializing GAPI:', err);
+  }
+};
 
-// Auto-load data from localStorage on page load
+window.maybeEnableButtons = function() {
+  if (gapiInited && gisInited) {
+    // Enable sign-in button
+    const authContainer = document.getElementById('authContainer');
+    const loginBtn = document.querySelector('button[onclick="handleLogin()"]');
+
+    if (authContainer) {
+      authContainer.style.display = 'flex';
+    }
+
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.style.opacity = '1';
+      loginBtn.style.cursor = 'pointer';
+
+      // Restore the original button content with Google icon
+      loginBtn.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Sign in with Google
+      `;
+    }
+
+    console.log('✅ Sign-in button enabled - ready to authenticate');
+  }
+};
+
+console.log('⏳ Preparing to load Google API libraries...');
+</script>
+
+<!-- Load Google API scripts AFTER functions are defined -->
+<script src="https://apis.google.com/js/api.js" onload="gapiLoaded()" onerror="console.error('❌ Failed to load Google Sheets API script. Check network/CORS.')"></script>
+<script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" onerror="console.error('❌ Failed to load Google Identity Services script. Check network/CORS.')"></script>
+
+<script>
+// Initialize button as disabled on page load
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('📂 Loading data from localStorage...');
-  if (typeof loadData === 'function') {
-    loadData();
+  const loginBtn = document.querySelector('button[onclick="handleLogin()"]');
+  if (loginBtn) {
+    loginBtn.disabled = true;
+    loginBtn.style.opacity = '0.6';
+    loginBtn.style.cursor = 'not-allowed';
+    const btnText = loginBtn.innerHTML;
+    loginBtn.innerHTML = btnText.replace('Sign in with Google', 'Loading Google APIs...');
   }
-  if (typeof render === 'function') {
-    render();
-  }
-  console.log('✅ App ready!');
 });
+
+// ================================================
+// GOOGLE SHEETS DATABASE HELPER FUNCTIONS
+// Mimics the Firebase RealtimeDB interface
+// ================================================
+
+window.RealtimeDB = {
+  // Parse path to sheet name and data location
+  _parsePath(path) {
+    // Path format: users/{userId}/advertisingData/{vendor}/batch_0
+    // or: users/{userId}/advertisingData/{vendor}/meta
+    const parts = path.split('/');
+    if (parts.length < 4) return null;
+
+    const dataType = parts[2]; // asinData, advertisingData, etc.
+    const vendor = parts[3];    // etrade, retailez, clicktech
+    const batchOrMeta = parts[4] || ''; // batch_0, meta, or empty
+
+    // Map to sheet name
+    const sheetName = `${vendor}_${dataType.replace('Data', '').replace('saved', '')}`;
+
+    return {
+      sheetName,
+      vendor,
+      dataType,
+      isMeta: batchOrMeta === 'meta',
+      batchIndex: batchOrMeta.startsWith('batch_') ? parseInt(batchOrMeta.split('_')[1]) : null
+    };
+  },
+
+  // Read all data from a sheet
+  async _readSheet(sheetName) {
+    try {
+      const response = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${sheetName}!A2:Z`, // Start from row 2 (row 1 is headers)
+      });
+      return response.result.values || [];
+    } catch (err) {
+      console.error(`Error reading sheet ${sheetName}:`, err);
+      return [];
+    }
+  },
+
+  // Write data to a sheet (overwrites existing data)
+  async _writeSheet(sheetName, data) {
+    try {
+      // Clear existing data first (except headers)
+      await gapi.client.sheets.spreadsheets.values.clear({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${sheetName}!A2:Z`,
+      });
+
+      // Write new data if there is any
+      if (data && data.length > 0) {
+        await gapi.client.sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${sheetName}!A2`,
+          valueInputOption: 'RAW',
+          resource: {
+            values: data
+          }
+        });
+      }
+      return true;
+    } catch (err) {
+      console.error(`Error writing to sheet ${sheetName}:`, err);
+      return false;
+    }
+  },
+
+  // Convert array of objects to 2D array for sheets
+  _objectsToRows(objects, sheetType) {
+    if (!objects || objects.length === 0) return [];
+
+    return objects.map(obj => {
+      if (sheetType === 'asinData') {
+        return [obj.asin || '', obj.vendorPrice || '', obj.date || ''];
+      } else if (sheetType === 'invoices') {
+        return [obj.date || '', obj.asin || '', obj.quantity || '', obj.itemPrice || '', obj.freight || ''];
+      } else if (sheetType === 'advertising') {
+        return [obj.date || '', obj.asin || '', obj.spend || '', obj.sales || '', obj.orders || '', obj.clicks || '', obj.impressions || ''];
+      } else if (sheetType === 'vretcogs') {
+        return [obj.date || '', obj.asin || '', obj.vret || '', obj.cogs || ''];
+      } else if (sheetType === 'freight') {
+        return [obj.invoiceId || '', obj.amount || ''];
+      }
+      return Object.values(obj);
+    });
+  },
+
+  // Convert 2D array from sheets to array of objects
+  _rowsToObjects(rows, sheetType) {
+    if (!rows || rows.length === 0) return [];
+
+    return rows.map(row => {
+      if (sheetType === 'asinData') {
+        return { asin: row[0] || '', vendorPrice: parseFloat(row[1]) || 0, date: row[2] || '' };
+      } else if (sheetType === 'invoices') {
+        return {
+          date: row[0] || '',
+          asin: row[1] || '',
+          quantity: parseInt(row[2]) || 0,
+          itemPrice: parseFloat(row[3]) || 0,
+          freight: parseFloat(row[4]) || 0
+        };
+      } else if (sheetType === 'advertising') {
+        return {
+          date: row[0] || '',
+          asin: row[1] || '',
+          spend: parseFloat(row[2]) || 0,
+          sales: parseFloat(row[3]) || 0,
+          orders: parseInt(row[4]) || 0,
+          clicks: parseInt(row[5]) || 0,
+          impressions: parseInt(row[6]) || 0
+        };
+      } else if (sheetType === 'vretcogs') {
+        return {
+          date: row[0] || '',
+          asin: row[1] || '',
+          vret: parseFloat(row[2]) || 0,
+          cogs: parseFloat(row[3]) || 0
+        };
+      } else if (sheetType === 'freight') {
+        return { invoiceId: row[0] || '', amount: parseFloat(row[1]) || 0 };
+      }
+      return {};
+    });
+  },
+
+  // Set data at a specific path (Firebase-compatible interface)
+  async setData(path, data) {
+    try {
+      const pathInfo = this._parsePath(path);
+      if (!pathInfo) {
+        return { success: false, error: 'Invalid path format' };
+      }
+
+      if (pathInfo.isMeta) {
+        // Store metadata in the metadata sheet
+        const metaSheet = 'metadata';
+        const metaKey = `${pathInfo.vendor}_${pathInfo.dataType}_meta`;
+        await gapi.client.sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${metaSheet}!A:B`,
+          valueInputOption: 'RAW',
+          resource: {
+            values: [[metaKey, JSON.stringify(data)]]
+          }
+        });
+        console.log(`✅ Metadata saved for ${metaKey}`);
+        return { success: true };
+      }
+
+      if (pathInfo.batchIndex !== null) {
+        // Save batch data
+        const sheetType = pathInfo.dataType.replace('Data', '').replace('saved', '').replace('Invoices', 'invoices').replace('Advertising', 'advertising').replace('VretCogs', 'vretcogs').replace('Freight', 'freight');
+        const rows = this._objectsToRows(data, sheetType);
+
+        // For batches, append to existing data
+        const existingData = await this._readSheet(pathInfo.sheetName);
+        const allRows = [...existingData, ...rows];
+
+        const success = await this._writeSheet(pathInfo.sheetName, allRows);
+        if (success) {
+          console.log(`✅ Data set at path: ${path}`);
+          return { success: true };
+        }
+      }
+
+      return { success: false, error: 'Unsupported path format' };
+    } catch (error) {
+      console.error(`❌ Error setting data at ${path}:`, error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Get data from a specific path (Firebase-compatible interface)
+  async getData(path) {
+    try {
+      const pathInfo = this._parsePath(path);
+      if (!pathInfo) {
+        return { success: false, error: 'Invalid path format' };
+      }
+
+      if (pathInfo.isMeta) {
+        // Retrieve metadata from metadata sheet
+        const metaSheet = 'metadata';
+        const metaKey = `${pathInfo.vendor}_${pathInfo.dataType}_meta`;
+
+        const response = await gapi.client.sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${metaSheet}!A:B`,
+        });
+
+        const rows = response.result.values || [];
+        const metaRow = rows.find(row => row[0] === metaKey);
+
+        if (metaRow && metaRow[1]) {
+          const metaData = JSON.parse(metaRow[1]);
+          console.log(`✅ Metadata retrieved for ${metaKey}`);
+          return { success: true, data: metaData };
+        } else {
+          console.log(`ℹ️ No metadata found for ${metaKey}`);
+          return { success: true, data: null };
+        }
+      }
+
+      if (pathInfo.batchIndex !== null) {
+        // Retrieve batch data
+        const rows = await this._readSheet(pathInfo.sheetName);
+        const sheetType = pathInfo.dataType.replace('Data', '').replace('saved', '').replace('Invoices', 'invoices').replace('Advertising', 'advertising').replace('VretCogs', 'vretcogs').replace('Freight', 'freight');
+
+        // Calculate batch range (500 items per batch)
+        const BATCH_SIZE = 500;
+        const startIdx = pathInfo.batchIndex * BATCH_SIZE;
+        const endIdx = startIdx + BATCH_SIZE;
+        const batchRows = rows.slice(startIdx, endIdx);
+
+        const data = this._rowsToObjects(batchRows, sheetType);
+        console.log(`✅ Data retrieved from path: ${path} (${data.length} items)`);
+        return { success: true, data: data };
+      }
+
+      return { success: true, data: null };
+    } catch (error) {
+      console.error(`❌ Error getting data from ${path}:`, error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Update data (for compatibility, redirects to setData)
+  async updateData(path, data) {
+    return await this.setData(path, data);
+  },
+
+  // Delete data at a specific path
+  async deleteData(path) {
+    try {
+      const pathInfo = this._parsePath(path);
+      if (!pathInfo) {
+        return { success: false, error: 'Invalid path format' };
+      }
+
+      // Clear the entire sheet for this vendor/dataType
+      await this._writeSheet(pathInfo.sheetName, []);
+
+      // Also clear metadata
+      const metaSheet = 'metadata';
+      const metaKey = `${pathInfo.vendor}_${pathInfo.dataType}_meta`;
+
+      // Remove metadata row
+      const response = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${metaSheet}!A:B`,
+      });
+
+      const rows = response.result.values || [];
+      const filteredRows = rows.filter(row => row[0] !== metaKey);
+
+      await gapi.client.sheets.spreadsheets.values.clear({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${metaSheet}!A:B`,
+      });
+
+      if (filteredRows.length > 0) {
+        await gapi.client.sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${metaSheet}!A1`,
+          valueInputOption: 'RAW',
+          resource: { values: filteredRows }
+        });
+      }
+
+      console.log(`✅ Data deleted at path: ${path}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Error deleting data at ${path}:`, error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Real-time listeners (not supported in Google Sheets, stubs for compatibility)
+  listenToData(path, callback) {
+    console.warn('⚠️ Real-time listeners not supported with Google Sheets backend');
+    return { success: true, ref: null };
+  },
+
+  stopListening(dbRef) {
+    return { success: true };
+  }
+};
+
+// ================================================
+// GOOGLE AUTHENTICATION FUNCTIONS
+// Replaces Firebase Auth
+// ================================================
+
+window.FirebaseAuth = {
+  // Sign up (not applicable for Google OAuth, just signs in)
+  async signUp(email, password) {
+    console.log('ℹ️ Google OAuth does not support email/password signup. Please sign in with Google.');
+    return await this.signIn(email, password);
+  },
+
+  // Sign in with Google
+  async signIn(email, password) {
+    // Check if Google APIs are initialized
+    if (!tokenClient) {
+      console.error('❌ Google Identity Services not initialized yet');
+      return {
+        success: false,
+        error: 'Google APIs are still loading. Please wait a moment and try again.'
+      };
+    }
+
+    if (!gapi || !gapi.client) {
+      console.error('❌ Google API client not initialized yet');
+      return {
+        success: false,
+        error: 'Google Sheets API is still loading. Please wait a moment and try again.'
+      };
+    }
+
+    return new Promise((resolve) => {
+      tokenClient.callback = async (resp) => {
+        if (resp.error !== undefined) {
+          console.error('❌ OAuth error:', resp.error);
+          resolve({ success: false, error: resp.error });
+          return;
+        }
+
+        // Get user info from Google
+        try {
+          const userInfo = await gapi.client.request({
+            path: 'https://www.googleapis.com/oauth2/v1/userinfo',
+          });
+
+          window.currentUser = {
+            uid: userInfo.result.id,
+            email: userInfo.result.email,
+            displayName: userInfo.result.name,
+            photoURL: userInfo.result.picture
+          };
+
+          console.log('✅ Signed in as:', window.currentUser.email);
+
+          // Load data
+          if (typeof loadData === 'function') {
+            await loadData();
+          }
+
+          // Show app container
+          const authContainer = document.getElementById('authContainer');
+          const appContainer = document.getElementById('appContainer');
+          if (authContainer) authContainer.style.display = 'none';
+          if (appContainer) appContainer.style.display = 'block';
+
+          resolve({ success: true, user: window.currentUser });
+        } catch (err) {
+          console.error('❌ Error getting user info:', err);
+          resolve({ success: false, error: err.message });
+        }
+      };
+
+      // Request access token
+      try {
+        if (gapi.client.getToken() === null) {
+          tokenClient.requestAccessToken({ prompt: 'consent' });
+        } else {
+          tokenClient.requestAccessToken({ prompt: '' });
+        }
+      } catch (err) {
+        console.error('❌ Error requesting access token:', err);
+        resolve({ success: false, error: 'Failed to initiate Google sign-in: ' + err.message });
+      }
+    });
+  },
+
+  // Sign out
+  async signOut() {
+    const token = gapi.client.getToken();
+    if (token !== null) {
+      google.accounts.oauth2.revoke(token.access_token);
+      gapi.client.setToken('');
+    }
+    window.currentUser = null;
+    console.log('✅ Signed out successfully');
+    return { success: true };
+  }
+};
+
+// Initialize when APIs are loaded
+window.gapiLoaded = gapiLoaded;
+window.gisLoaded = gisLoaded;
+
+// Check if scripts are actually loading
+// Poll every 500ms to see if libraries are available
+let initCheckCount = 0;
+const maxInitChecks = 30; // 15 seconds max (30 * 500ms)
+
+const initChecker = setInterval(function() {
+  initCheckCount++;
+
+  // Check if libraries are available
+  const gapiAvailable = typeof gapi !== 'undefined';
+  const gisAvailable = typeof google !== 'undefined' && typeof google.accounts !== 'undefined';
+
+  console.log(`🔍 Check #${initCheckCount}: gapi=${gapiAvailable}, gis=${gisAvailable}, gapiInited=${gapiInited}, gisInited=${gisInited}`);
+
+  // Try to initialize if libraries are available but not initialized
+  if (gapiAvailable && !gapiInited) {
+    console.log('⚡ Manually initializing GAPI...');
+    try {
+      window.gapiLoaded();
+    } catch (err) {
+      console.error('Error calling gapiLoaded:', err);
+    }
+  }
+
+  if (gisAvailable && !gisInited) {
+    console.log('⚡ Manually initializing GIS...');
+    try {
+      window.gisLoaded();
+    } catch (err) {
+      console.error('Error calling gisLoaded:', err);
+    }
+  }
+
+  // If both are initialized, stop checking
+  if (gapiInited && gisInited) {
+    console.log('✅✅ Both APIs initialized successfully!');
+    clearInterval(initChecker);
+  }
+
+  // If we've checked too many times, give up
+  if (initCheckCount >= maxInitChecks) {
+    console.error('❌ Gave up after', maxInitChecks, 'checks (15 seconds)');
+    console.error('Final status: gapi loaded =', gapiAvailable, ', GIS loaded =', gisAvailable);
+    clearInterval(initChecker);
+
+    if (!gapiAvailable || !gisAvailable) {
+      console.error('');
+      console.error('Scripts did not load from Google CDN!');
+      console.error('Possible causes:');
+      console.error('  1. No internet connection');
+      console.error('  2. Firewall blocking googleapis.com');
+      console.error('  3. Ad blocker blocking scripts');
+      console.error('  4. Running from file:// protocol');
+      console.error('');
+
+      showAuthMessage('❌ Google API scripts failed to load.\n\nCheck:\n• Internet connection\n• Ad blocker disabled\n• Running from http://localhost:8000', 'error');
+    }
+  }
+}, 500);
+
+// Original timeout checker (now as backup)
+setTimeout(function() {
+  console.log('🔍 Checking API loading status...');
+  console.log('  - gapi loaded?', typeof gapi !== 'undefined');
+  console.log('  - google.accounts loaded?', typeof google !== 'undefined' && typeof google.accounts !== 'undefined');
+  console.log('  - gapiInited?', gapiInited);
+  console.log('  - gisInited?', gisInited);
+
+  // Try manual initialization if libraries loaded but callbacks didn't fire
+  if (typeof gapi !== 'undefined' && !gapiInited) {
+    console.warn('⚠️ GAPI library loaded but not initialized. Trying manual init...');
+    window.gapiLoaded();
+  }
+  if (typeof google !== 'undefined' && typeof google.accounts !== 'undefined' && !gisInited) {
+    console.warn('⚠️ GIS library loaded but not initialized. Trying manual init...');
+    window.gisLoaded();
+  }
+}, 2000);
+
+// Set a timeout to check if APIs loaded
+setTimeout(function() {
+  if (!gapiInited || !gisInited) {
+    console.warn('⚠️ Google APIs taking longer than expected to load...');
+    console.log('Debug info:');
+    console.log('  - Are you running from file://? (This won\'t work - use http://localhost)');
+    console.log('  - Is internet connection working?');
+    console.log('  - Are scripts blocked by ad blocker?');
+
+    const loginBtn = document.querySelector('button[onclick="handleLogin()"]');
+    if (loginBtn && loginBtn.disabled) {
+      loginBtn.innerHTML = 'Loading... Please wait or refresh the page';
+    }
+  }
+}, 5000);
+
+// Set a final timeout for failure
+setTimeout(function() {
+  if (!gapiInited || !gisInited) {
+    console.error('❌ Google APIs failed to load within 15 seconds');
+    console.error('Please check:');
+    console.error('  1. Running from http://localhost:8000 (NOT file://)');
+    console.error('  2. Internet connection is active');
+    console.error('  3. No ad blocker blocking Google scripts');
+    console.error('  4. Browser console for CORS errors');
+
+    showAuthMessage('⚠️ Failed to load Google APIs.\n\nPlease ensure:\n• Running from http://localhost:8000\n• Internet connection is active\n• No ad blocker enabled', 'error');
+  }
+}, 15000);
+
+console.log('✅ Google Sheets backend initialized!');
+console.log('✅ Spreadsheet ID:', SPREADSHEET_ID);
+console.log('✅ Client ID configured');
+console.log('🌐 Current URL:', window.location.href);
+console.log('⚠️ IMPORTANT: Must be running from http://localhost:8000 (NOT file://)');
+console.log('⏳ Waiting for Google APIs to load...');
+console.log('📚 Available methods: RealtimeDB.setData, RealtimeDB.getData, RealtimeDB.deleteData');
+console.log('📚 Auth methods: FirebaseAuth.signIn, FirebaseAuth.signOut');
+
+// Check if running from file:// protocol
+if (window.location.protocol === 'file:') {
+  console.error('❌❌❌ CRITICAL ERROR ❌❌❌');
+  console.error('You are running from file:// protocol!');
+  console.error('Google OAuth and APIs will NOT work from file://');
+  console.error('');
+  console.error('HOW TO FIX:');
+  console.error('1. Open terminal/command prompt');
+  console.error('2. Navigate to the folder containing INDEX.html');
+  console.error('3. Run: python3 -m http.server 8000');
+  console.error('4. Open: http://localhost:8000/INDEX.html');
+  console.error('');
+  showAuthMessage('❌ Cannot run from file://\n\nPlease use a web server:\npython3 -m http.server 8000\nThen open: http://localhost:8000/INDEX.html', 'error');
+}
 
 </script>
 
