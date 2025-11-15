@@ -5713,25 +5713,68 @@ async function initializeGapiClient() {
 }
 
 function gisLoaded() {
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: SCOPES,
-    callback: '', // defined later
-  });
-  gisInited = true;
-  maybeEnableButtons();
-  console.log('✅ Google Identity Services initialized');
+  try {
+    if (!window.google || !window.google.accounts) {
+      console.error('❌ Google Identity Services library not loaded');
+      return;
+    }
+
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: SCOPES,
+      callback: '', // defined later
+    });
+    gisInited = true;
+    maybeEnableButtons();
+    console.log('✅ Google Identity Services initialized');
+  } catch (err) {
+    console.error('❌ Error initializing Google Identity Services:', err);
+    showAuthMessage('Failed to initialize Google Sign-In. Please refresh the page.', 'error');
+  }
 }
 
 function maybeEnableButtons() {
   if (gapiInited && gisInited) {
     // Enable sign-in button
     const authContainer = document.getElementById('authContainer');
+    const loginBtn = document.querySelector('button[onclick="handleLogin()"]');
+
     if (authContainer) {
       authContainer.style.display = 'flex';
     }
+
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.style.opacity = '1';
+      loginBtn.style.cursor = 'pointer';
+
+      // Restore the original button content with Google icon
+      loginBtn.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Sign in with Google
+      `;
+    }
+
+    console.log('✅ Sign-in button enabled - ready to authenticate');
   }
 }
+
+// Initialize button as disabled on page load
+document.addEventListener('DOMContentLoaded', function() {
+  const loginBtn = document.querySelector('button[onclick="handleLogin()"]');
+  if (loginBtn) {
+    loginBtn.disabled = true;
+    loginBtn.style.opacity = '0.6';
+    loginBtn.style.cursor = 'not-allowed';
+    const btnText = loginBtn.innerHTML;
+    loginBtn.innerHTML = btnText.replace('Sign in with Google', 'Loading Google APIs...');
+  }
+});
 
 // ================================================
 // GOOGLE SHEETS DATABASE HELPER FUNCTIONS
@@ -6039,9 +6082,27 @@ window.FirebaseAuth = {
 
   // Sign in with Google
   async signIn(email, password) {
+    // Check if Google APIs are initialized
+    if (!tokenClient) {
+      console.error('❌ Google Identity Services not initialized yet');
+      return {
+        success: false,
+        error: 'Google APIs are still loading. Please wait a moment and try again.'
+      };
+    }
+
+    if (!gapi || !gapi.client) {
+      console.error('❌ Google API client not initialized yet');
+      return {
+        success: false,
+        error: 'Google Sheets API is still loading. Please wait a moment and try again.'
+      };
+    }
+
     return new Promise((resolve) => {
       tokenClient.callback = async (resp) => {
         if (resp.error !== undefined) {
+          console.error('❌ OAuth error:', resp.error);
           resolve({ success: false, error: resp.error });
           return;
         }
@@ -6074,15 +6135,21 @@ window.FirebaseAuth = {
 
           resolve({ success: true, user: window.currentUser });
         } catch (err) {
+          console.error('❌ Error getting user info:', err);
           resolve({ success: false, error: err.message });
         }
       };
 
       // Request access token
-      if (gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-      } else {
-        tokenClient.requestAccessToken({ prompt: '' });
+      try {
+        if (gapi.client.getToken() === null) {
+          tokenClient.requestAccessToken({ prompt: 'consent' });
+        } else {
+          tokenClient.requestAccessToken({ prompt: '' });
+        }
+      } catch (err) {
+        console.error('❌ Error requesting access token:', err);
+        resolve({ success: false, error: 'Failed to initiate Google sign-in: ' + err.message });
       }
     });
   },
@@ -6104,13 +6171,29 @@ window.FirebaseAuth = {
 window.gapiLoaded = gapiLoaded;
 window.gisLoaded = gisLoaded;
 
-// Call initialization
-if (typeof gapi !== 'undefined') {
-  gapiLoaded();
-}
+// Set a timeout to check if APIs loaded
+setTimeout(function() {
+  if (!gapiInited || !gisInited) {
+    console.warn('⚠️ Google APIs taking longer than expected to load...');
+    const loginBtn = document.querySelector('button[onclick="handleLogin()"]');
+    if (loginBtn && loginBtn.disabled) {
+      loginBtn.innerHTML = 'Loading... Please wait or refresh the page';
+    }
+  }
+}, 5000);
+
+// Set a final timeout for failure
+setTimeout(function() {
+  if (!gapiInited || !gisInited) {
+    console.error('❌ Google APIs failed to load within 15 seconds');
+    showAuthMessage('Failed to load Google APIs. Please check your internet connection and refresh the page.', 'error');
+  }
+}, 15000);
 
 console.log('✅ Google Sheets backend initialized!');
 console.log('✅ Spreadsheet ID:', SPREADSHEET_ID);
+console.log('✅ Client ID configured');
+console.log('⏳ Waiting for Google APIs to load...');
 console.log('📚 Available methods: RealtimeDB.setData, RealtimeDB.getData, RealtimeDB.deleteData');
 console.log('📚 Auth methods: FirebaseAuth.signIn, FirebaseAuth.signOut');
 
