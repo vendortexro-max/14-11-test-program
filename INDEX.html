@@ -1544,10 +1544,6 @@ await window.RealtimeDB.setData(
 { batchCount: asinBatches.length }
 );
 console.log(`✅ Saved ${asinBatches.length} ASIN batches for ${vendor}`);
-} else {
-// Delete old batches when data is cleared
-await window.RealtimeDB.deleteData(`users/${userId}/asinData/${vendor}`);
-console.log(`🗑️ Deleted all ASIN data for ${vendor}`);
 }
 
 // Save Invoices in batches
@@ -1564,10 +1560,6 @@ await window.RealtimeDB.setData(
 { batchCount: invoiceBatches.length }
 );
 console.log(`✅ Saved ${invoiceBatches.length} invoice batches for ${vendor}`);
-} else {
-// Delete old batches when data is cleared
-await window.RealtimeDB.deleteData(`users/${userId}/savedInvoices/${vendor}`);
-console.log(`🗑️ Deleted all invoice data for ${vendor}`);
 }
 
 // Save Advertising Data in batches
@@ -1584,10 +1576,6 @@ await window.RealtimeDB.setData(
 { batchCount: adBatches.length }
 );
 console.log(`✅ Saved ${adBatches.length} advertising batches for ${vendor}`);
-} else {
-// Delete old batches when data is cleared
-await window.RealtimeDB.deleteData(`users/${userId}/advertisingData/${vendor}`);
-console.log(`🗑️ Deleted all advertising data for ${vendor}`);
 }
 
 // Save VRET & COGS in batches
@@ -1604,10 +1592,6 @@ await window.RealtimeDB.setData(
 { batchCount: vretBatches.length }
 );
 console.log(`✅ Saved ${vretBatches.length} VRET/COGS batches for ${vendor}`);
-} else {
-// Delete old batches when data is cleared
-await window.RealtimeDB.deleteData(`users/${userId}/savedVretCogs/${vendor}`);
-console.log(`🗑️ Deleted all VRET/COGS data for ${vendor}`);
 }
 
 // Save Freight Costs (usually small, no batching needed)
@@ -1617,10 +1601,6 @@ await window.RealtimeDB.setData(
 state.freightCosts[vendor]
 );
 console.log(`✅ Saved freight costs for ${vendor}`);
-} else {
-// Delete freight costs when cleared
-await window.RealtimeDB.deleteData(`users/${userId}/freightCosts/${vendor}`);
-console.log(`🗑️ Deleted freight costs for ${vendor}`);
 }
 }
 
@@ -5039,7 +5019,7 @@ console.log(`🗑️ Deleted ${deleted} entries for date: ${dateToDelete}`);
 }
 
 // Clear all advertising data
-function clearAllAdvertisingData() {
+async function clearAllAdvertisingData() {
 const count = state.advertisingData[state.selectedVendor]?.length || 0;
 
 if (count === 0) {
@@ -5048,8 +5028,16 @@ return;
 }
 
 if (confirm(`⚠️ Are you sure you want to delete ALL ${count} advertising entries for ${state.selectedVendor}?\n\nThis action cannot be undone!`)) {
+// First, delete from Firebase
+if (window.currentUser) {
+const userId = window.currentUser.uid;
+const vendor = state.selectedVendor;
+await window.RealtimeDB.deleteData(`users/${userId}/advertisingData/${vendor}`);
+console.log(`🗑️ Deleted advertising data from Firebase for ${vendor}`);
+}
+
+// Then clear from state
 state.advertisingData[state.selectedVendor] = [];
-saveData();
 renderAdvertising();
 showNotification('All advertising data cleared!', 'success');
 console.log(`🗑️ Cleared all advertising data for ${state.selectedVendor}`);
