@@ -1198,30 +1198,23 @@ display: block;
 <p>Sign in to access your data</p>
 </div>
 
-<!-- Google Sign-In Form -->
+<!-- Login Form -->
 <div id="loginForm" class="auth-form">
-<h2>Sign in with Google</h2>
-<p style="color: #6b7280; margin-bottom: 1.5rem; text-align: center;">
-Access your P&L data stored in Google Sheets
-</p>
-<button onclick="handleLogin()" class="btn btn-primary btn-block" style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-<path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-<path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-<path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-<path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-</svg>
-Sign in with Google
-</button>
-<p style="color: #9ca3af; font-size: 0.875rem; margin-top: 1rem; text-align: center;">
-By signing in, you authorize this app to access your Google Sheets
-</p>
+<h2>Login</h2>
+<input type="email" id="loginEmail" placeholder="Email" class="auth-input" required>
+<input type="password" id="loginPassword" placeholder="Password" class="auth-input" required>
+<button onclick="handleLogin()" class="btn btn-primary btn-block">Login</button>
+<p class="auth-switch">Don't have an account? <a href="#" onclick="showSignup(); return false;">Sign Up</a></p>
 </div>
 
-<!-- Hidden signup form (not used with Google OAuth) -->
+<!-- Signup Form -->
 <div id="signupForm" class="auth-form" style="display: none;">
 <h2>Sign Up</h2>
-<p style="color: #6b7280;">Google OAuth is used for authentication. Please sign in with your Google account.</p>
+<input type="email" id="signupEmail" placeholder="Email" class="auth-input" required>
+<input type="password" id="signupPassword" placeholder="Password (min 6 characters)" class="auth-input" required>
+<input type="password" id="signupConfirm" placeholder="Confirm Password" class="auth-input" required>
+<button onclick="handleSignup()" class="btn btn-success btn-block">Create Account</button>
+<p class="auth-switch">Already have an account? <a href="#" onclick="showLogin(); return false;">Login</a></p>
 </div>
 
 <div id="authMessage" class="auth-message"></div>
@@ -1233,7 +1226,7 @@ By signing in, you authorize this app to access your Google Sheets
 <!-- Database Connection Status -->
 <div id="dbConnection" class="sheets-connection connected">
 <div class="status-dot connected"></div>
-<span id="connectionStatus">Google Sheets: Connected ✓</span>
+<span id="connectionStatus">Firebase: Connected ✓</span>
 <span id="userEmail" style="margin-left: 1rem; font-size: 0.875rem;"></span>
 <button onclick="handleLogout()" class="btn btn-secondary" style="margin-left: 1rem; padding: 0.5rem 0.875rem; font-size: 0.8125rem;">
 Logout
@@ -5572,33 +5565,67 @@ msgDiv.className = 'auth-message';
 msgDiv.textContent = '';
 }
 
-// Handle Login with Google OAuth
+// Handle Login
 async function handleLogin() {
-showAuthMessage('Signing in with Google...', 'info');
+const email = document.getElementById('loginEmail').value.trim();
+const password = document.getElementById('loginPassword').value;
+
+if (!email || !password) {
+showAuthMessage('Please enter email and password', 'error');
+return;
+}
+
+showAuthMessage('Logging in...', 'info');
 
 try {
-const result = await window.FirebaseAuth.signIn();
+const result = await window.FirebaseAuth.signIn(email, password);
 if (result.success) {
 showAuthMessage('✅ Login successful! Loading your data...', 'success');
-// Show user email
-const userEmailSpan = document.getElementById('userEmail');
-if (userEmailSpan && window.currentUser) {
-userEmailSpan.textContent = `Logged in as: ${window.currentUser.email}`;
-}
+// Auth state listener will handle UI updates
 } else {
-showAuthMessage(result.error || 'Login failed. Please try again.', 'error');
+showAuthMessage(result.error || 'Login failed', 'error');
 }
 } catch (error) {
 console.error('Login error:', error);
-showAuthMessage(error.message || 'Login failed. Please ensure pop-ups are enabled.', 'error');
+showAuthMessage(error.message || 'Login failed', 'error');
 }
 }
 
-// Handle Signup (redirects to Google Sign-In)
+// Handle Signup
 async function handleSignup() {
-showAuthMessage('Please sign in with your Google account', 'info');
-// Redirect to login
-showLogin();
+const email = document.getElementById('signupEmail').value.trim();
+const password = document.getElementById('signupPassword').value;
+const confirm = document.getElementById('signupConfirm').value;
+
+if (!email || !password || !confirm) {
+showAuthMessage('Please fill in all fields', 'error');
+return;
+}
+
+if (password.length < 6) {
+showAuthMessage('Password must be at least 6 characters', 'error');
+return;
+}
+
+if (password !== confirm) {
+showAuthMessage('Passwords do not match', 'error');
+return;
+}
+
+showAuthMessage('Creating account...', 'info');
+
+try {
+const result = await window.FirebaseAuth.signUp(email, password);
+if (result.success) {
+showAuthMessage('✅ Account created successfully! Logging you in...', 'success');
+// Auth state listener will handle UI updates
+} else {
+showAuthMessage(result.error || 'Signup failed', 'error');
+}
+} catch (error) {
+console.error('Signup error:', error);
+showAuthMessage(error.message || 'Signup failed', 'error');
+}
 }
 
 // Handle Logout
@@ -5665,8 +5692,8 @@ console.log('✓ Firebase authentication ready');
 </script>
 
 <!-- Google Sheets API Configuration -->
-<script src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-<script src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js"></script>
 <script>
 
 // ================================================
@@ -5688,434 +5715,336 @@ let gapiInited = false;
 let gisInited = false;
 window.currentUser = null;
 
+// Firebase Database Helper Functions
+window.FirebaseDB = {
+// Add a document to a collection
+async addDocument(collectionName, data) {
+try {
+const docRef = await addDoc(collection(db, collectionName), {
+...data,
+createdAt: new Date().toISOString()
+});
+console.log(`✅ Document added to ${collectionName} with ID: ${docRef.id}`);
+return { success: true, id: docRef.id };
+} catch (error) {
+console.error(`❌ Error adding document to ${collectionName}:`, error);
+return { success: false, error: error.message };
+}
+},
+
+// Set a document with a specific ID
+async setDocument(collectionName, docId, data) {
+try {
+await setDoc(doc(db, collectionName, docId), {
+...data,
+updatedAt: new Date().toISOString()
+});
+console.log(`✅ Document set in ${collectionName} with ID: ${docId}`);
+return { success: true, id: docId };
+} catch (error) {
+console.error(`❌ Error setting document in ${collectionName}:`, error);
+return { success: false, error: error.message };
+}
+},
+
+// Update a document
+async updateDocument(collectionName, docId, data) {
+try {
+await updateDoc(doc(db, collectionName, docId), {
+...data,
+updatedAt: new Date().toISOString()
+});
+console.log(`✅ Document updated in ${collectionName} with ID: ${docId}`);
+return { success: true, id: docId };
+} catch (error) {
+console.error(`❌ Error updating document in ${collectionName}:`, error);
+return { success: false, error: error.message };
+}
+},
+
+// Get all documents from a collection
+async getAllDocuments(collectionName) {
+try {
+const querySnapshot = await getDocs(collection(db, collectionName));
+const documents = [];
+querySnapshot.forEach((doc) => {
+documents.push({ id: doc.id, ...doc.data() });
+});
+console.log(`✅ Retrieved ${documents.length} documents from ${collectionName}`);
+return { success: true, data: documents };
+} catch (error) {
+console.error(`❌ Error getting documents from ${collectionName}:`, error);
+return { success: false, error: error.message };
+}
+},
+
+// Query documents with filters
+async queryDocuments(collectionName, conditions = []) {
+try {
+let q = collection(db, collectionName);
+
+// Apply conditions (e.g., [{ field: 'vendor', operator: '==', value: 'etrade' }])
+if (conditions.length > 0) {
+const constraints = conditions.map(condition => {
+if (condition.type === 'where') {
+return where(condition.field, condition.operator, condition.value);
+} else if (condition.type === 'orderBy') {
+return orderBy(condition.field, condition.direction || 'asc');
+}
+});
+q = query(q, ...constraints);
+}
+
+const querySnapshot = await getDocs(q);
+const documents = [];
+querySnapshot.forEach((doc) => {
+documents.push({ id: doc.id, ...doc.data() });
+});
+console.log(`✅ Query returned ${documents.length} documents from ${collectionName}`);
+return { success: true, data: documents };
+} catch (error) {
+console.error(`❌ Error querying ${collectionName}:`, error);
+return { success: false, error: error.message };
+}
+},
+
+// Delete a document
+async deleteDocument(collectionName, docId) {
+try {
+await deleteDoc(doc(db, collectionName, docId));
+console.log(`✅ Document deleted from ${collectionName} with ID: ${docId}`);
+return { success: true };
+} catch (error) {
+console.error(`❌ Error deleting document from ${collectionName}:`, error);
+return { success: false, error: error.message };
+}
+},
+
+// Example: Save vendor data
+async saveVendorData(userId, vendor, dataType, data) {
+const collectionName = `users/${userId}/${dataType}`;
+return await this.addDocument(collectionName, {
+vendor: vendor,
+data: data,
+timestamp: new Date().toISOString()
+});
+},
+
+// Example: Get vendor data
+async getVendorData(userId, vendor, dataType) {
+const collectionName = `users/${userId}/${dataType}`;
+return await this.queryDocuments(collectionName, [
+{ type: 'where', field: 'vendor', operator: '==', value: vendor },
+{ type: 'orderBy', field: 'timestamp', direction: 'desc' }
+]);
+}
+};
+
+console.log('✅ Firebase initialized successfully!');
+console.log('✅ Firestore database ready!');
+console.log('📚 Available methods: FirebaseDB.addDocument, FirebaseDB.setDocument, FirebaseDB.updateDocument, FirebaseDB.getAllDocuments, FirebaseDB.queryDocuments, FirebaseDB.deleteDocument');
+
 // ================================================
-// GOOGLE SHEETS API BACKEND
-// Complete replacement for Firebase
-// ================================================
-
-// Initialize Google API
-function gapiLoaded() {
-  gapi.load('client', initializeGapiClient);
-}
-
-async function initializeGapiClient() {
-  try {
-    await gapi.client.init({
-      apiKey: API_KEY,
-      discoveryDocs: [DISCOVERY_DOC],
-    });
-    gapiInited = true;
-    maybeEnableButtons();
-    console.log('✅ Google Sheets API initialized');
-  } catch (err) {
-    console.error('Error initializing GAPI:', err);
-  }
-}
-
-function gisLoaded() {
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: SCOPES,
-    callback: '', // defined later
-  });
-  gisInited = true;
-  maybeEnableButtons();
-  console.log('✅ Google Identity Services initialized');
-}
-
-function maybeEnableButtons() {
-  if (gapiInited && gisInited) {
-    // Enable sign-in button
-    const authContainer = document.getElementById('authContainer');
-    if (authContainer) {
-      authContainer.style.display = 'flex';
-    }
-  }
-}
-
-// ================================================
-// GOOGLE SHEETS DATABASE HELPER FUNCTIONS
-// Mimics the Firebase RealtimeDB interface
+// FIREBASE REALTIME DATABASE HELPER FUNCTIONS
 // ================================================
 
 window.RealtimeDB = {
-  // Parse path to sheet name and data location
-  _parsePath(path) {
-    // Path format: users/{userId}/advertisingData/{vendor}/batch_0
-    // or: users/{userId}/advertisingData/{vendor}/meta
-    const parts = path.split('/');
-    if (parts.length < 4) return null;
+// Set data at a specific path
+async setData(path, data) {
+try {
+const dbRef = ref(realtimeDB, path);
+await set(dbRef, data);
+console.log(`✅ Data set at path: ${path}`);
+return { success: true };
+} catch (error) {
+console.error(`❌ Error setting data at ${path}:`, error);
+return { success: false, error: error.message };
+}
+},
 
-    const dataType = parts[2]; // asinData, advertisingData, etc.
-    const vendor = parts[3];    // etrade, retailez, clicktech
-    const batchOrMeta = parts[4] || ''; // batch_0, meta, or empty
+// Get data from a specific path
+async getData(path) {
+try {
+const dbRef = ref(realtimeDB, path);
+const snapshot = await get(dbRef);
+if (snapshot.exists()) {
+console.log(`✅ Data retrieved from path: ${path}`);
+return { success: true, data: snapshot.val() };
+} else {
+console.log(`ℹ️ No data found at path: ${path}`);
+return { success: true, data: null };
+}
+} catch (error) {
+console.error(`❌ Error getting data from ${path}:`, error);
+return { success: false, error: error.message };
+}
+},
 
-    // Map to sheet name
-    const sheetName = `${vendor}_${dataType.replace('Data', '').replace('saved', '')}`;
+// Update data at a specific path
+async updateData(path, data) {
+try {
+const dbRef = ref(realtimeDB, path);
+await update(dbRef, data);
+console.log(`✅ Data updated at path: ${path}`);
+return { success: true };
+} catch (error) {
+console.error(`❌ Error updating data at ${path}:`, error);
+return { success: false, error: error.message };
+}
+},
 
-    return {
-      sheetName,
-      vendor,
-      dataType,
-      isMeta: batchOrMeta === 'meta',
-      batchIndex: batchOrMeta.startsWith('batch_') ? parseInt(batchOrMeta.split('_')[1]) : null
-    };
-  },
+// Delete data at a specific path
+async deleteData(path) {
+try {
+const dbRef = ref(realtimeDB, path);
+await remove(dbRef);
+console.log(`✅ Data deleted at path: ${path}`);
+return { success: true };
+} catch (error) {
+console.error(`❌ Error deleting data at ${path}:`, error);
+return { success: false, error: error.message };
+}
+},
 
-  // Read all data from a sheet
-  async _readSheet(sheetName) {
-    try {
-      const response = await gapi.client.sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${sheetName}!A2:Z`, // Start from row 2 (row 1 is headers)
-      });
-      return response.result.values || [];
-    } catch (err) {
-      console.error(`Error reading sheet ${sheetName}:`, err);
-      return [];
-    }
-  },
+// Listen for real-time changes at a path
+listenToData(path, callback) {
+try {
+const dbRef = ref(realtimeDB, path);
+onValue(dbRef, (snapshot) => {
+const data = snapshot.exists() ? snapshot.val() : null;
+callback({ success: true, data: data });
+});
+console.log(`✅ Listening to real-time changes at: ${path}`);
+return { success: true, ref: dbRef };
+} catch (error) {
+console.error(`❌ Error listening to ${path}:`, error);
+return { success: false, error: error.message };
+}
+},
 
-  // Write data to a sheet (overwrites existing data)
-  async _writeSheet(sheetName, data) {
-    try {
-      // Clear existing data first (except headers)
-      await gapi.client.sheets.spreadsheets.values.clear({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${sheetName}!A2:Z`,
-      });
-
-      // Write new data if there is any
-      if (data && data.length > 0) {
-        await gapi.client.sheets.spreadsheets.values.update({
-          spreadsheetId: SPREADSHEET_ID,
-          range: `${sheetName}!A2`,
-          valueInputOption: 'RAW',
-          resource: {
-            values: data
-          }
-        });
-      }
-      return true;
-    } catch (err) {
-      console.error(`Error writing to sheet ${sheetName}:`, err);
-      return false;
-    }
-  },
-
-  // Convert array of objects to 2D array for sheets
-  _objectsToRows(objects, sheetType) {
-    if (!objects || objects.length === 0) return [];
-
-    return objects.map(obj => {
-      if (sheetType === 'asinData') {
-        return [obj.asin || '', obj.vendorPrice || '', obj.date || ''];
-      } else if (sheetType === 'invoices') {
-        return [obj.date || '', obj.asin || '', obj.quantity || '', obj.itemPrice || '', obj.freight || ''];
-      } else if (sheetType === 'advertising') {
-        return [obj.date || '', obj.asin || '', obj.spend || '', obj.sales || '', obj.orders || '', obj.clicks || '', obj.impressions || ''];
-      } else if (sheetType === 'vretcogs') {
-        return [obj.date || '', obj.asin || '', obj.vret || '', obj.cogs || ''];
-      } else if (sheetType === 'freight') {
-        return [obj.invoiceId || '', obj.amount || ''];
-      }
-      return Object.values(obj);
-    });
-  },
-
-  // Convert 2D array from sheets to array of objects
-  _rowsToObjects(rows, sheetType) {
-    if (!rows || rows.length === 0) return [];
-
-    return rows.map(row => {
-      if (sheetType === 'asinData') {
-        return { asin: row[0] || '', vendorPrice: parseFloat(row[1]) || 0, date: row[2] || '' };
-      } else if (sheetType === 'invoices') {
-        return {
-          date: row[0] || '',
-          asin: row[1] || '',
-          quantity: parseInt(row[2]) || 0,
-          itemPrice: parseFloat(row[3]) || 0,
-          freight: parseFloat(row[4]) || 0
-        };
-      } else if (sheetType === 'advertising') {
-        return {
-          date: row[0] || '',
-          asin: row[1] || '',
-          spend: parseFloat(row[2]) || 0,
-          sales: parseFloat(row[3]) || 0,
-          orders: parseInt(row[4]) || 0,
-          clicks: parseInt(row[5]) || 0,
-          impressions: parseInt(row[6]) || 0
-        };
-      } else if (sheetType === 'vretcogs') {
-        return {
-          date: row[0] || '',
-          asin: row[1] || '',
-          vret: parseFloat(row[2]) || 0,
-          cogs: parseFloat(row[3]) || 0
-        };
-      } else if (sheetType === 'freight') {
-        return { invoiceId: row[0] || '', amount: parseFloat(row[1]) || 0 };
-      }
-      return {};
-    });
-  },
-
-  // Set data at a specific path (Firebase-compatible interface)
-  async setData(path, data) {
-    try {
-      const pathInfo = this._parsePath(path);
-      if (!pathInfo) {
-        return { success: false, error: 'Invalid path format' };
-      }
-
-      if (pathInfo.isMeta) {
-        // Store metadata in the metadata sheet
-        const metaSheet = 'metadata';
-        const metaKey = `${pathInfo.vendor}_${pathInfo.dataType}_meta`;
-        await gapi.client.sheets.spreadsheets.values.update({
-          spreadsheetId: SPREADSHEET_ID,
-          range: `${metaSheet}!A:B`,
-          valueInputOption: 'RAW',
-          resource: {
-            values: [[metaKey, JSON.stringify(data)]]
-          }
-        });
-        console.log(`✅ Metadata saved for ${metaKey}`);
-        return { success: true };
-      }
-
-      if (pathInfo.batchIndex !== null) {
-        // Save batch data
-        const sheetType = pathInfo.dataType.replace('Data', '').replace('saved', '').replace('Invoices', 'invoices').replace('Advertising', 'advertising').replace('VretCogs', 'vretcogs').replace('Freight', 'freight');
-        const rows = this._objectsToRows(data, sheetType);
-
-        // For batches, append to existing data
-        const existingData = await this._readSheet(pathInfo.sheetName);
-        const allRows = [...existingData, ...rows];
-
-        const success = await this._writeSheet(pathInfo.sheetName, allRows);
-        if (success) {
-          console.log(`✅ Data set at path: ${path}`);
-          return { success: true };
-        }
-      }
-
-      return { success: false, error: 'Unsupported path format' };
-    } catch (error) {
-      console.error(`❌ Error setting data at ${path}:`, error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Get data from a specific path (Firebase-compatible interface)
-  async getData(path) {
-    try {
-      const pathInfo = this._parsePath(path);
-      if (!pathInfo) {
-        return { success: false, error: 'Invalid path format' };
-      }
-
-      if (pathInfo.isMeta) {
-        // Retrieve metadata from metadata sheet
-        const metaSheet = 'metadata';
-        const metaKey = `${pathInfo.vendor}_${pathInfo.dataType}_meta`;
-
-        const response = await gapi.client.sheets.spreadsheets.values.get({
-          spreadsheetId: SPREADSHEET_ID,
-          range: `${metaSheet}!A:B`,
-        });
-
-        const rows = response.result.values || [];
-        const metaRow = rows.find(row => row[0] === metaKey);
-
-        if (metaRow && metaRow[1]) {
-          const metaData = JSON.parse(metaRow[1]);
-          console.log(`✅ Metadata retrieved for ${metaKey}`);
-          return { success: true, data: metaData };
-        } else {
-          console.log(`ℹ️ No metadata found for ${metaKey}`);
-          return { success: true, data: null };
-        }
-      }
-
-      if (pathInfo.batchIndex !== null) {
-        // Retrieve batch data
-        const rows = await this._readSheet(pathInfo.sheetName);
-        const sheetType = pathInfo.dataType.replace('Data', '').replace('saved', '').replace('Invoices', 'invoices').replace('Advertising', 'advertising').replace('VretCogs', 'vretcogs').replace('Freight', 'freight');
-
-        // Calculate batch range (500 items per batch)
-        const BATCH_SIZE = 500;
-        const startIdx = pathInfo.batchIndex * BATCH_SIZE;
-        const endIdx = startIdx + BATCH_SIZE;
-        const batchRows = rows.slice(startIdx, endIdx);
-
-        const data = this._rowsToObjects(batchRows, sheetType);
-        console.log(`✅ Data retrieved from path: ${path} (${data.length} items)`);
-        return { success: true, data: data };
-      }
-
-      return { success: true, data: null };
-    } catch (error) {
-      console.error(`❌ Error getting data from ${path}:`, error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Update data (for compatibility, redirects to setData)
-  async updateData(path, data) {
-    return await this.setData(path, data);
-  },
-
-  // Delete data at a specific path
-  async deleteData(path) {
-    try {
-      const pathInfo = this._parsePath(path);
-      if (!pathInfo) {
-        return { success: false, error: 'Invalid path format' };
-      }
-
-      // Clear the entire sheet for this vendor/dataType
-      await this._writeSheet(pathInfo.sheetName, []);
-
-      // Also clear metadata
-      const metaSheet = 'metadata';
-      const metaKey = `${pathInfo.vendor}_${pathInfo.dataType}_meta`;
-
-      // Remove metadata row
-      const response = await gapi.client.sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${metaSheet}!A:B`,
-      });
-
-      const rows = response.result.values || [];
-      const filteredRows = rows.filter(row => row[0] !== metaKey);
-
-      await gapi.client.sheets.spreadsheets.values.clear({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${metaSheet}!A:B`,
-      });
-
-      if (filteredRows.length > 0) {
-        await gapi.client.sheets.spreadsheets.values.update({
-          spreadsheetId: SPREADSHEET_ID,
-          range: `${metaSheet}!A1`,
-          valueInputOption: 'RAW',
-          resource: { values: filteredRows }
-        });
-      }
-
-      console.log(`✅ Data deleted at path: ${path}`);
-      return { success: true };
-    } catch (error) {
-      console.error(`❌ Error deleting data at ${path}:`, error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Real-time listeners (not supported in Google Sheets, stubs for compatibility)
-  listenToData(path, callback) {
-    console.warn('⚠️ Real-time listeners not supported with Google Sheets backend');
-    return { success: true, ref: null };
-  },
-
-  stopListening(dbRef) {
-    return { success: true };
-  }
+// Stop listening to a path
+stopListening(dbRef) {
+try {
+off(dbRef);
+console.log(`✅ Stopped listening to real-time changes`);
+return { success: true };
+} catch (error) {
+console.error(`❌ Error stopping listener:`, error);
+return { success: false, error: error.message };
+}
+}
 };
 
+console.log('✅ Realtime Database ready!');
+console.log('📚 Available methods: RealtimeDB.setData, RealtimeDB.getData, RealtimeDB.updateData, RealtimeDB.deleteData, RealtimeDB.listenToData, RealtimeDB.stopListening');
+
 // ================================================
-// GOOGLE AUTHENTICATION FUNCTIONS
-// Replaces Firebase Auth
+// FIREBASE AUTHENTICATION
 // ================================================
 
+// Firebase Auth Helper Functions
 window.FirebaseAuth = {
-  // Sign up (not applicable for Google OAuth, just signs in)
-  async signUp(email, password) {
-    console.log('ℹ️ Google OAuth does not support email/password signup. Please sign in with Google.');
-    return await this.signIn(email, password);
-  },
+// Sign up new user
+async signUp(email, password) {
+try {
+const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+console.log('✅ User created:', userCredential.user.email);
+return { success: true, user: userCredential.user };
+} catch (error) {
+console.error('❌ Signup error:', error);
+return { success: false, error: error.message };
+}
+},
 
-  // Sign in with Google
-  async signIn(email, password) {
-    return new Promise((resolve) => {
-      tokenClient.callback = async (resp) => {
-        if (resp.error !== undefined) {
-          resolve({ success: false, error: resp.error });
-          return;
-        }
+// Sign in existing user
+async signIn(email, password) {
+try {
+const userCredential = await signInWithEmailAndPassword(auth, email, password);
+console.log('✅ User signed in:', userCredential.user.email);
+return { success: true, user: userCredential.user };
+} catch (error) {
+console.error('❌ Login error:', error);
+return { success: false, error: error.message };
+}
+},
 
-        // Get user info from Google
-        try {
-          const userInfo = await gapi.client.request({
-            path: 'https://www.googleapis.com/oauth2/v1/userinfo',
-          });
+// Sign out current user
+async signOut() {
+try {
+await signOut(auth);
+console.log('✅ User signed out');
+return { success: true };
+} catch (error) {
+console.error('❌ Logout error:', error);
+return { success: false, error: error.message };
+}
+},
 
-          window.currentUser = {
-            uid: userInfo.result.id,
-            email: userInfo.result.email,
-            displayName: userInfo.result.name,
-            photoURL: userInfo.result.picture
-          };
-
-          console.log('✅ Signed in as:', window.currentUser.email);
-
-          // Load data
-          if (typeof loadData === 'function') {
-            await loadData();
-          }
-
-          // Show app container
-          const authContainer = document.getElementById('authContainer');
-          const appContainer = document.getElementById('appContainer');
-          if (authContainer) authContainer.style.display = 'none';
-          if (appContainer) appContainer.style.display = 'block';
-
-          resolve({ success: true, user: window.currentUser });
-        } catch (err) {
-          resolve({ success: false, error: err.message });
-        }
-      };
-
-      // Request access token
-      if (gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-      } else {
-        tokenClient.requestAccessToken({ prompt: '' });
-      }
-    });
-  },
-
-  // Sign out
-  async signOut() {
-    const token = gapi.client.getToken();
-    if (token !== null) {
-      google.accounts.oauth2.revoke(token.access_token);
-      gapi.client.setToken('');
-    }
-    window.currentUser = null;
-    console.log('✅ Signed out successfully');
-    return { success: true };
-  }
+// Get current user
+getCurrentUser() {
+return auth.currentUser;
+}
 };
 
-// Initialize when APIs are loaded
-window.gapiLoaded = gapiLoaded;
-window.gisLoaded = gisLoaded;
+// Listen for auth state changes
+onAuthStateChanged(auth, async (user) => {
+if (user) {
+// User is signed in
+console.log('🔐 User is signed in:', user.email);
+window.currentUser = user;
 
-// Call initialization
-if (typeof gapi !== 'undefined') {
-  gapiLoaded();
+// Reset logout flag when logging in
+if (typeof isLoggingOut !== 'undefined') {
+isLoggingOut = false;
 }
 
-console.log('✅ Google Sheets backend initialized!');
-console.log('✅ Spreadsheet ID:', SPREADSHEET_ID);
-console.log('📚 Available methods: RealtimeDB.setData, RealtimeDB.getData, RealtimeDB.deleteData');
-console.log('📚 Auth methods: FirebaseAuth.signIn, FirebaseAuth.signOut');
+// Show app container, hide auth container
+const authContainer = document.getElementById('authContainer');
+const appContainer = document.getElementById('appContainer');
+const userEmailSpan = document.getElementById('userEmail');
 
+if (authContainer) authContainer.style.display = 'none';
+if (appContainer) appContainer.style.display = 'block';
+if (userEmailSpan) userEmailSpan.textContent = user.email;
+
+// Load user data from Firebase
+if (typeof loadData === 'function') {
+await loadData();
+}
+
+// Set up real-time data synchronization
+if (typeof setupRealtimeSync === 'function') {
+setupRealtimeSync();
+}
+
+// Render the app
+if (typeof render === 'function') {
+render();
+}
+} else {
+// User is signed out
+console.log('🔓 User is signed out');
+window.currentUser = null;
+
+// Stop real-time sync
+if (typeof stopRealtimeSync === 'function') {
+stopRealtimeSync();
+}
+
+// Show auth container, hide app container
+const authContainer = document.getElementById('authContainer');
+const appContainer = document.getElementById('appContainer');
+
+if (authContainer) authContainer.style.display = 'flex';
+if (appContainer) appContainer.style.display = 'none';
+}
+});
+
+console.log('✅ Firebase Authentication ready!');
+console.log('✅ Firebase Realtime Database initialized at:', firebaseConfig.databaseURL);
+console.log('🔍 Debug: window.currentUser on load =', window.currentUser);
+console.log('🔍 Debug: window.RealtimeDB =', typeof window.RealtimeDB);
 </script>
-
 
 </div> <!-- Close appContainer -->
 </body>
