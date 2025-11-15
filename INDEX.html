@@ -5665,10 +5665,7 @@ console.log('✓ Firebase authentication ready');
 </script>
 
 <!-- Google Sheets API Configuration -->
-<script src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-<script src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 <script>
-
 // ================================================
 // GOOGLE SHEETS API CONFIGURATION
 // ================================================
@@ -5693,29 +5690,18 @@ window.currentUser = null;
 // Complete replacement for Firebase
 // ================================================
 
-// Initialize Google API
-function gapiLoaded() {
-  gapi.load('client', initializeGapiClient);
-}
+// Define these functions BEFORE loading the scripts
+window.gapiLoaded = function() {
+  console.log('📦 GAPI script loaded, initializing client...');
+  gapi.load('client', window.initializeGapiClient);
+};
 
-async function initializeGapiClient() {
-  try {
-    await gapi.client.init({
-      apiKey: API_KEY,
-      discoveryDocs: [DISCOVERY_DOC],
-    });
-    gapiInited = true;
-    maybeEnableButtons();
-    console.log('✅ Google Sheets API initialized');
-  } catch (err) {
-    console.error('Error initializing GAPI:', err);
-  }
-}
-
-function gisLoaded() {
+window.gisLoaded = function() {
+  console.log('📦 GIS script loaded, initializing token client...');
   try {
     if (!window.google || !window.google.accounts) {
       console.error('❌ Google Identity Services library not loaded');
+      setTimeout(window.gisLoaded, 500); // Retry after 500ms
       return;
     }
 
@@ -5725,15 +5711,32 @@ function gisLoaded() {
       callback: '', // defined later
     });
     gisInited = true;
-    maybeEnableButtons();
+    window.maybeEnableButtons();
     console.log('✅ Google Identity Services initialized');
   } catch (err) {
     console.error('❌ Error initializing Google Identity Services:', err);
-    showAuthMessage('Failed to initialize Google Sign-In. Please refresh the page.', 'error');
+    if (typeof showAuthMessage === 'function') {
+      showAuthMessage('Failed to initialize Google Sign-In. Please refresh the page.', 'error');
+    }
   }
-}
+};
 
-function maybeEnableButtons() {
+// Helper function for initialization
+window.initializeGapiClient = async function() {
+  try {
+    await gapi.client.init({
+      apiKey: API_KEY,
+      discoveryDocs: [DISCOVERY_DOC],
+    });
+    gapiInited = true;
+    window.maybeEnableButtons();
+    console.log('✅ Google Sheets API initialized');
+  } catch (err) {
+    console.error('Error initializing GAPI:', err);
+  }
+};
+
+window.maybeEnableButtons = function() {
   if (gapiInited && gisInited) {
     // Enable sign-in button
     const authContainer = document.getElementById('authContainer');
@@ -5762,8 +5765,16 @@ function maybeEnableButtons() {
 
     console.log('✅ Sign-in button enabled - ready to authenticate');
   }
-}
+};
 
+console.log('⏳ Preparing to load Google API libraries...');
+</script>
+
+<!-- Load Google API scripts AFTER functions are defined -->
+<script src="https://apis.google.com/js/api.js" async defer onload="gapiLoaded()"></script>
+<script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
+
+<script>
 // Initialize button as disabled on page load
 document.addEventListener('DOMContentLoaded', function() {
   const loginBtn = document.querySelector('button[onclick="handleLogin()"]');
