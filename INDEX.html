@@ -1356,6 +1356,9 @@ clicktech: []
 deleteConfirm: null
 };
 
+// Auto-save interval tracking
+let autoSaveInterval = null;
+
 // Load data from Firebase
 async function loadData() {
 if (!window.currentUser) {
@@ -4231,8 +4234,7 @@ break;
 loadData();
 render();
 
-// Auto-save every 30 seconds
-setInterval(saveData, 30000);
+// Auto-save will be initialized after data is loaded (see onAuthStateChanged)
 
 // ENHANCED FUNCTIONS FOR DAILY/WEEKLY/MONTHLY ANALYTICS WITH AD SPEND
 
@@ -6024,6 +6026,13 @@ if (typeof loadData === 'function') {
 await loadData();
 }
 
+// Start auto-save only AFTER data is loaded to prevent data loss
+if (autoSaveInterval) {
+clearInterval(autoSaveInterval);
+}
+autoSaveInterval = setInterval(saveData, 30000);
+console.log('✅ Auto-save interval started (every 30 seconds)');
+
 // Set up real-time data synchronization
 if (typeof setupRealtimeSync === 'function') {
 setupRealtimeSync();
@@ -6037,6 +6046,13 @@ render();
 // User is signed out
 console.log('🔓 User is signed out');
 window.currentUser = null;
+
+// Stop auto-save interval
+if (autoSaveInterval) {
+clearInterval(autoSaveInterval);
+autoSaveInterval = null;
+console.log('✅ Auto-save interval stopped');
+}
 
 // Stop real-time sync
 if (typeof stopRealtimeSync === 'function') {
