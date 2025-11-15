@@ -5771,8 +5771,8 @@ console.log('⏳ Preparing to load Google API libraries...');
 </script>
 
 <!-- Load Google API scripts AFTER functions are defined -->
-<script src="https://apis.google.com/js/api.js" async defer onload="gapiLoaded()"></script>
-<script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
+<script src="https://apis.google.com/js/api.js" onload="gapiLoaded()" onerror="console.error('❌ Failed to load Google Sheets API script. Check network/CORS.')"></script>
+<script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" onerror="console.error('❌ Failed to load Google Identity Services script. Check network/CORS.')"></script>
 
 <script>
 // Initialize button as disabled on page load
@@ -6182,10 +6182,34 @@ window.FirebaseAuth = {
 window.gapiLoaded = gapiLoaded;
 window.gisLoaded = gisLoaded;
 
+// Check if scripts are actually loading
+setTimeout(function() {
+  console.log('🔍 Checking API loading status...');
+  console.log('  - gapi loaded?', typeof gapi !== 'undefined');
+  console.log('  - google.accounts loaded?', typeof google !== 'undefined' && typeof google.accounts !== 'undefined');
+  console.log('  - gapiInited?', gapiInited);
+  console.log('  - gisInited?', gisInited);
+
+  // Try manual initialization if libraries loaded but callbacks didn't fire
+  if (typeof gapi !== 'undefined' && !gapiInited) {
+    console.warn('⚠️ GAPI library loaded but not initialized. Trying manual init...');
+    window.gapiLoaded();
+  }
+  if (typeof google !== 'undefined' && typeof google.accounts !== 'undefined' && !gisInited) {
+    console.warn('⚠️ GIS library loaded but not initialized. Trying manual init...');
+    window.gisLoaded();
+  }
+}, 2000);
+
 // Set a timeout to check if APIs loaded
 setTimeout(function() {
   if (!gapiInited || !gisInited) {
     console.warn('⚠️ Google APIs taking longer than expected to load...');
+    console.log('Debug info:');
+    console.log('  - Are you running from file://? (This won\'t work - use http://localhost)');
+    console.log('  - Is internet connection working?');
+    console.log('  - Are scripts blocked by ad blocker?');
+
     const loginBtn = document.querySelector('button[onclick="handleLogin()"]');
     if (loginBtn && loginBtn.disabled) {
       loginBtn.innerHTML = 'Loading... Please wait or refresh the page';
@@ -6197,16 +6221,39 @@ setTimeout(function() {
 setTimeout(function() {
   if (!gapiInited || !gisInited) {
     console.error('❌ Google APIs failed to load within 15 seconds');
-    showAuthMessage('Failed to load Google APIs. Please check your internet connection and refresh the page.', 'error');
+    console.error('Please check:');
+    console.error('  1. Running from http://localhost:8000 (NOT file://)');
+    console.error('  2. Internet connection is active');
+    console.error('  3. No ad blocker blocking Google scripts');
+    console.error('  4. Browser console for CORS errors');
+
+    showAuthMessage('⚠️ Failed to load Google APIs.\n\nPlease ensure:\n• Running from http://localhost:8000\n• Internet connection is active\n• No ad blocker enabled', 'error');
   }
 }, 15000);
 
 console.log('✅ Google Sheets backend initialized!');
 console.log('✅ Spreadsheet ID:', SPREADSHEET_ID);
 console.log('✅ Client ID configured');
+console.log('🌐 Current URL:', window.location.href);
+console.log('⚠️ IMPORTANT: Must be running from http://localhost:8000 (NOT file://)');
 console.log('⏳ Waiting for Google APIs to load...');
 console.log('📚 Available methods: RealtimeDB.setData, RealtimeDB.getData, RealtimeDB.deleteData');
 console.log('📚 Auth methods: FirebaseAuth.signIn, FirebaseAuth.signOut');
+
+// Check if running from file:// protocol
+if (window.location.protocol === 'file:') {
+  console.error('❌❌❌ CRITICAL ERROR ❌❌❌');
+  console.error('You are running from file:// protocol!');
+  console.error('Google OAuth and APIs will NOT work from file://');
+  console.error('');
+  console.error('HOW TO FIX:');
+  console.error('1. Open terminal/command prompt');
+  console.error('2. Navigate to the folder containing INDEX.html');
+  console.error('3. Run: python3 -m http.server 8000');
+  console.error('4. Open: http://localhost:8000/INDEX.html');
+  console.error('');
+  showAuthMessage('❌ Cannot run from file://\n\nPlease use a web server:\npython3 -m http.server 8000\nThen open: http://localhost:8000/INDEX.html', 'error');
+}
 
 </script>
 
