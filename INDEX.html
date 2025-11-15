@@ -1238,6 +1238,9 @@ Logout
 <div class="header-title">
 <h1>P&L Management Software</h1>
 <p class="header-subtitle">Multi-Vendor Business Analytics</p>
+<div id="loading-status" style="display: none; margin-top: 0.5rem; padding: 0.5rem 1rem; background: #fff3cd; border-radius: 4px; border-left: 4px solid #ffc107; font-size: 0.875rem; color: #856404;">
+⏳ <strong>Loading data...</strong> Please wait, do not close this tab.
+</div>
 </div>
 <div class="vendor-selector">
 <button class="vendor-btn active" data-vendor="etrade">E-Trade</button>
@@ -1355,7 +1358,8 @@ clicktech: []
 },
 deleteConfirm: null,
 isLoading: false,
-hasUnsavedChanges: false
+hasUnsavedChanges: false,
+isDataLoaded: false  // Prevent saves until initial data load is complete
 };
 
 // LocalStorage keys for temporary data persistence
@@ -1459,6 +1463,13 @@ return;
 
 // Set loading state
 state.isLoading = true;
+state.isDataLoaded = false;  // Reset flag
+
+// Show loading indicator
+const loadingStatus = document.getElementById('loading-status');
+if (loadingStatus) {
+loadingStatus.style.display = 'block';
+}
 showNotification('⏳ Loading data from Firebase...', 'info');
 
 try {
@@ -1574,11 +1585,30 @@ console.log(`✅ All data loaded for ${vendor}`);
 }
 
 console.log('✅ All data loaded from Firebase Realtime Database');
-showNotification('✅ Data loaded successfully!', 'success');
+
+// Mark data as loaded - NOW it's safe to auto-save
+state.isDataLoaded = true;
+console.log('✅ Data loading complete. Auto-save is now enabled.');
+
+// Hide loading indicator
+const loadingStatus = document.getElementById('loading-status');
+if (loadingStatus) {
+loadingStatus.style.display = 'none';
+}
+
+showNotification('✅ Data loaded successfully! You can now work safely.', 'success');
 render();
 } catch (error) {
 console.error('Error loading data from Firebase:', error);
 showNotification('❌ Error loading data: ' + error.message, 'error');
+// Even on error, mark as loaded to prevent blocking saves forever
+state.isDataLoaded = true;
+
+// Hide loading indicator even on error
+const loadingStatus = document.getElementById('loading-status');
+if (loadingStatus) {
+loadingStatus.style.display = 'none';
+}
 } finally {
 // Clear loading state
 state.isLoading = false;
@@ -1598,6 +1628,13 @@ return batches;
 async function saveData(forceSave = false) {
 if (!window.currentUser) {
 console.log('No user logged in, skipping save');
+return;
+}
+
+// CRITICAL: Don't save until initial data load is complete
+// This prevents overwriting Firebase with empty/partial state
+if (!state.isDataLoaded && !forceSave) {
+console.log('⏸️ Skipping auto-save - waiting for initial data load to complete');
 return;
 }
 
@@ -4418,9 +4455,10 @@ break;
 loadData();
 render();
 
-// Auto-save every 30 seconds (with debouncing)
+// Auto-save every 30 seconds - ONLY after data is loaded
 setInterval(() => {
-if (window.currentUser && !state.isLoading) {
+if (window.currentUser && !state.isLoading && state.isDataLoaded) {
+console.log('🔄 Running auto-save...');
 saveData(false); // Silent auto-save
 }
 }, 30000);
