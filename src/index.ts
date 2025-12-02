@@ -499,34 +499,62 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_freight_costs": {
         const { userId, vendor, startDate, endDate, limit = 100 } = args as any;
 
-        const freightData = await getUserData(userId, "freightCosts");
         let results: any[] = [];
+        const vendors = vendor ? [vendor] : ['etrade', 'retailez', 'clicktech'];
 
-        if (freightData) {
-          for (const key in freightData) {
-            const batch = freightData[key];
-            if (Array.isArray(batch)) {
-              results.push(...batch);
-            } else if (typeof batch === "object") {
-              results.push(batch);
+        // Freight costs are stored per vendor as: {invoiceId: cost}
+        for (const vendorName of vendors) {
+          const freightData = await getUserData(userId, `freightCosts/${vendorName}`);
+
+          if (freightData && typeof freightData === 'object') {
+            // Convert invoice ID -> cost mapping to array of objects
+            for (const [invoiceId, cost] of Object.entries(freightData)) {
+              results.push({
+                vendor: vendorName,
+                invoiceId: invoiceId,
+                freightCost: cost,
+              });
+            }
+          }
+        }
+
+        // If we need to filter by date, we need to fetch invoice data to get dates
+        if (startDate || endDate) {
+          // Fetch invoice data to get dates for each invoice
+          const invoiceData: any = {};
+
+          for (const vendorName of vendors) {
+            const dfInvoices = await getUserData(userId, `savedInvoices/${vendorName}`);
+            if (dfInvoices) {
+              // Collect all invoices from batches
+              for (const key in dfInvoices) {
+                const batch = dfInvoices[key];
+                const invoices = Array.isArray(batch) ? batch : [batch];
+                invoices.forEach((inv: any) => {
+                  if (inv.invoiceId) {
+                    invoiceData[inv.invoiceId] = inv.date;
+                  }
+                });
+              }
             }
           }
 
-          // Apply filters
-          if (vendor) {
-            results = results.filter(freight => freight.vendor === vendor);
-          }
+          // Add dates to freight results and filter
+          results = results.map(freight => ({
+            ...freight,
+            date: invoiceData[freight.invoiceId] || null,
+          }));
 
           if (startDate) {
-            results = results.filter(freight => freight.date >= startDate);
+            results = results.filter(freight => freight.date && freight.date >= startDate);
           }
 
           if (endDate) {
-            results = results.filter(freight => freight.date <= endDate);
+            results = results.filter(freight => freight.date && freight.date <= endDate);
           }
-
-          results = results.slice(0, limit);
         }
+
+        results = results.slice(0, limit);
 
         return {
           content: [

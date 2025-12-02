@@ -2752,7 +2752,9 @@ if (!state.freightCosts[state.selectedVendor]) {
 state.freightCosts[state.selectedVendor] = {};
 }
 state.freightCosts[state.selectedVendor][invoiceId] = value;
+console.log(`💰 Updated freight cost for invoice ${invoiceId}: $${value}`);
 saveData();
+showNotification(`✅ Freight cost updated for invoice ${invoiceId}`, 'success');
 }
 
 function deleteInvoice(invoiceId) {
