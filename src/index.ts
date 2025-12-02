@@ -215,6 +215,36 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "get_freight_costs",
+        description: "Retrieve freight cost data for shipments and logistics. Returns freight charges, dates, and related shipping information.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            userId: {
+              type: "string",
+              description: "User ID to fetch data for",
+            },
+            vendor: {
+              type: "string",
+              description: "Filter by vendor (optional)",
+            },
+            startDate: {
+              type: "string",
+              description: "Filter freight costs from this date (YYYY-MM-DD format, optional)",
+            },
+            endDate: {
+              type: "string",
+              description: "Filter freight costs until this date (YYYY-MM-DD format, optional)",
+            },
+            limit: {
+              type: "number",
+              description: "Limit number of results (default: 100)",
+            },
+          },
+          required: ["userId"],
+        },
+      },
+      {
         name: "get_profit_summary",
         description: "Get aggregated profit and loss summary across all vendors. Calculates total revenue, costs, advertising spend, and net profit for a specified time period.",
         inputSchema: {
@@ -450,6 +480,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (month) filters.month = month;
 
           results = filterData(results, filters);
+          results = results.slice(0, limit);
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                count: results.length,
+                data: results,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "get_freight_costs": {
+        const { userId, vendor, startDate, endDate, limit = 100 } = args as any;
+
+        const freightData = await getUserData(userId, "freightCosts");
+        let results: any[] = [];
+
+        if (freightData) {
+          for (const key in freightData) {
+            const batch = freightData[key];
+            if (Array.isArray(batch)) {
+              results.push(...batch);
+            } else if (typeof batch === "object") {
+              results.push(batch);
+            }
+          }
+
+          // Apply filters
+          if (vendor) {
+            results = results.filter(freight => freight.vendor === vendor);
+          }
+
+          if (startDate) {
+            results = results.filter(freight => freight.date >= startDate);
+          }
+
+          if (endDate) {
+            results = results.filter(freight => freight.date <= endDate);
+          }
+
           results = results.slice(0, limit);
         }
 

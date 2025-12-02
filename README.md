@@ -10,6 +10,7 @@ The MCP server provides Claude AI with access to:
 - **Invoice Data**: Direct Fulfillment (DF) and Fulfillment Center (FC) invoices
 - **Advertising Data**: Campaign spend, impressions, clicks, and ACOS metrics
 - **VRET & COGS**: Vendor returns and cost of goods sold tracking
+- **Freight Costs**: Shipment and logistics freight charges
 - **Profit Summaries**: Aggregated P&L calculations across time periods
 
 ## Supported Vendors
@@ -158,7 +159,19 @@ Retrieve vendor returns and COGS data.
 
 **Example**: "Show VRET data for ClickTech in March 2024"
 
-### 6. `get_profit_summary`
+### 6. `get_freight_costs`
+Retrieve freight cost data for shipments and logistics.
+
+**Parameters**:
+- `userId` (required): User ID
+- `vendor` (optional): Filter by vendor
+- `startDate` (optional): Start date (YYYY-MM-DD)
+- `endDate` (optional): End date (YYYY-MM-DD)
+- `limit` (optional): Limit results (default: 100)
+
+**Example**: "Show me all freight costs for eTrade in January 2024"
+
+### 7. `get_profit_summary`
 Get aggregated P&L summary.
 
 **Parameters**:
@@ -180,6 +193,8 @@ Once connected, you can ask Claude questions like:
 - "What's my ACOS for advertising campaigns in February?"
 - "Compare performance between eTrade and RetailEZ"
 - "Show me all invoices over $10,000 from last quarter"
+- "Get all freight costs for January 2024"
+- "What are my total freight charges for RetailEZ this year?"
 
 ## Development
 
