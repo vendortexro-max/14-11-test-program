@@ -1468,7 +1468,13 @@ console.log(`✅ Loaded ${oldResult.data.length} VRET/COGS items for ${vendor} (
 // Load Freight Costs (not batched)
 const freightResult = await window.RealtimeDB.getData(`users/${userId}/freightCosts/${vendor}`);
 if (freightResult.success && freightResult.data) {
-state.freightCosts[vendor] = freightResult.data;
+// Decode invoice IDs from Firebase keys (e.g., GT%2F50 -> GT/50)
+const decodedFreightCosts = {};
+Object.keys(freightResult.data).forEach(encodedKey => {
+const decodedKey = decodeFirebaseKey(encodedKey);
+decodedFreightCosts[decodedKey] = freightResult.data[encodedKey];
+});
+state.freightCosts[vendor] = decodedFreightCosts;
 console.log(`✅ Loaded freight costs for ${vendor}`);
 }
 
@@ -1596,9 +1602,16 @@ console.log(`✅ Saved ${vretBatches.length} VRET/COGS batches for ${vendor}`);
 
 // Save Freight Costs (usually small, no batching needed)
 if (state.freightCosts[vendor] && Object.keys(state.freightCosts[vendor]).length > 0) {
+// Encode invoice IDs to avoid Firebase invalid key errors (e.g., GT/50 -> GT%2F50)
+const encodedFreightCosts = {};
+Object.keys(state.freightCosts[vendor]).forEach(invoiceId => {
+const encodedKey = encodeFirebaseKey(invoiceId);
+encodedFreightCosts[encodedKey] = state.freightCosts[vendor][invoiceId];
+});
+
 await window.RealtimeDB.setData(
 `users/${userId}/freightCosts/${vendor}`,
-state.freightCosts[vendor]
+encodedFreightCosts
 );
 console.log(`✅ Saved freight costs for ${vendor}`);
 }
@@ -1636,6 +1649,31 @@ console.log('✅ No real-time listeners to stop');
 }
 
 // Helper Functions
+// Encode invoice IDs for Firebase (replace invalid characters)
+// Firebase doesn't allow: . # $ / [ ]
+function encodeFirebaseKey(key) {
+if (!key) return key;
+return key
+.replace(/\./g, '%2E')
+.replace(/#/g, '%23')
+.replace(/\$/g, '%24')
+.replace(/\//g, '%2F')
+.replace(/\[/g, '%5B')
+.replace(/\]/g, '%5D');
+}
+
+// Decode Firebase keys back to original invoice IDs
+function decodeFirebaseKey(key) {
+if (!key) return key;
+return key
+.replace(/%2E/g, '.')
+.replace(/%23/g, '#')
+.replace(/%24/g, '$')
+.replace(/%2F/g, '/')
+.replace(/%5B/g, '[')
+.replace(/%5D/g, ']');
+}
+
 // Parse date string in multiple formats (YYYY-MM-DD, DD-MM-YYYY, etc.)
 function parseDate(dateStr) {
 if (!dateStr) return null;

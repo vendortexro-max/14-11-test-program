@@ -71,6 +71,19 @@ async function getUserData(userId: string, dataPath: string): Promise<any> {
   return snapshot.val();
 }
 
+// Helper function to decode Firebase keys (invoice IDs may be encoded)
+// Firebase doesn't allow: . # $ / [ ]
+function decodeFirebaseKey(key: string): string {
+  if (!key) return key;
+  return key
+    .replace(/%2E/g, '.')
+    .replace(/%23/g, '#')
+    .replace(/%24/g, '$')
+    .replace(/%2F/g, '/')
+    .replace(/%5B/g, '[')
+    .replace(/%5D/g, ']');
+}
+
 // Helper function to query data with filters
 function filterData(data: any[], filters: Record<string, any>): any[] {
   if (!data || !Array.isArray(data)) return [];
@@ -502,13 +515,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let results: any[] = [];
         const vendors = vendor ? [vendor] : ['etrade', 'retailez', 'clicktech'];
 
-        // Freight costs are stored per vendor as: {invoiceId: cost}
+        // Freight costs are stored per vendor as: {encodedInvoiceId: cost}
         for (const vendorName of vendors) {
           const freightData = await getUserData(userId, `freightCosts/${vendorName}`);
 
           if (freightData && typeof freightData === 'object') {
             // Convert invoice ID -> cost mapping to array of objects
-            for (const [invoiceId, cost] of Object.entries(freightData)) {
+            // Decode invoice IDs (they're encoded in Firebase to avoid invalid characters)
+            for (const [encodedInvoiceId, cost] of Object.entries(freightData)) {
+              const invoiceId = decodeFirebaseKey(encodedInvoiceId);
               results.push({
                 vendor: vendorName,
                 invoiceId: invoiceId,
